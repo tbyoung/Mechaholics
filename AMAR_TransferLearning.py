@@ -7,11 +7,11 @@ import matplotlib.pyplot as plt
 
 plant_dir = os.path.join('data') #Directory that contains all images for use with transfer learning
 IMAGE_SIZE = 224 #Image size for Mobilenet v2
-BATCH_SIZE = 64
+BATCH_SIZE = 64 #The number of images per batch
 
-datagen = tf.keras.preprocessing.image.ImageDataGenerator( #Create datagenerator for model trainging and evaluation
-    rescale=1./255, #Rescale image for variables from (0-255) to (0-1) for faster/easier training (less hard math)
-    validation_split=0.2)
+datagen = tf.keras.preprocessing.image.ImageDataGenerator(
+    rescale=1./255, 
+    validation_split=0.2) #20% of data is used for validation, 80% is used for training
 
 train_generator = datagen.flow_from_directory( #Generate data for training the model
     plant_dir,
@@ -27,14 +27,21 @@ val_generator = datagen.flow_from_directory( #Generate data for evaluating the m
 
 image_batch, label_batch = next(val_generator) #Create a batch for the evaluation data
 image_batch.shape, label_batch.shape
-print (train_generator.class_indices)
+print (train_generator.class_indices) #Prints the integer and associated label for the model (For example, in the AMAR Dataset, if the indice output is 0, the associated label is no_plant. This is printed as: 'no_plant': 0)
 
-labels = '\n'.join(sorted(train_generator.class_indices.keys())) #create label data
+labels = '\n'.join(sorted(train_generator.class_indices.keys())) #create label data separated by new lines. Example follows below:
+#amar_labels.txt Example:
 
-with open('plant_labels.txt', 'w') as f: #Save label data as txt (easy to read and open in any OS, easy to modify in case of necessary changes)
+#no_plant
+#pigweed
+#turnip
+
+
+#in the actual text file, the comment indicators are not present as it is not code, this leaves only the label strings separated by new lines.
+with open('amar_labels.txt', 'w') as f: #Save label data as txt (easy to read and open in any OS, easy to modify in case of necessary changes)
   f.write(labels)
 
-IMG_SHAPE = (IMAGE_SIZE, IMAGE_SIZE, 3) #Define image shape for model
+IMG_SHAPE = (IMAGE_SIZE, IMAGE_SIZE, 3) #Define image shape for model. In this case, 224x224 pixels with 3 color channels representing red, green, and blue
 
 # Create the base model from the pre-trained MobileNet V2
 base_model = tf.keras.applications.MobileNetV2(input_shape=IMG_SHAPE,  #Utilizing the MobileNetV2 base model (and requisite specifications); beginning of transfer learning
@@ -44,9 +51,9 @@ base_model.trainable = False #do not change current base model for now
 model = tf.keras.Sequential([ #Our modifications to the base model
   base_model, #Base model on top of our modifications
   tf.keras.layers.Conv2D(filters=32, kernel_size=3, activation='relu'), #Conv2D layer - applies 32 filters (to extract feature map) with 3 kernel size (size of filter applied across image)
-  tf.keras.layers.Dropout(0.2), #Dropout layer, prevents overfitting of model even if we train for too many epochs
+  tf.keras.layers.Dropout(0.2), #Dropout layer, minimizes overfitting of model even if we train for too many epochs and have a lack of data
   tf.keras.layers.GlobalAveragePooling2D(), #Pooling layer, accepts 4D tensor (result from conv2d and dropout) and outputs 2D tensor (batch dimensions, number of channels)
-  tf.keras.layers.Dense(units=2, activation='softmax') #Condenses output to 2 tensors specifying class and score with score being how likely an image is to be the associated label based upon the training
+  tf.keras.layers.Dense(units=3, activation='softmax') #Condenses output to 2 tensors specifying class and score with score being how likely an image is to be the associated label based upon the training
 ])
 model.compile(optimizer='adam', 
               loss='categorical_crossentropy', 
@@ -66,7 +73,8 @@ val_loss = history.history['val_loss']
 
 print("Number of layers in the base model: ", len(base_model.layers))
 base_model.trainable = True #Now we can fine tune the base-model (could have done previously, but this is the setup i came across online)
-fine_tune_at = 100 #Originally meant for MobilenetV1 model (which has significantly more layers), however I find that this fine-tune point works for this transfer learning model with mobilenetV2 as well
+fine_tune_at = 50 #The original model that this example utilized when undergoing transfer learning, MobileNetV1, contained 106 layers as opposed to 53. This fine_tune_at variable was then experimented with to achieve results that corrected an underfit issue when left at the original value of 100.
+
 
 # Freeze (make untrainable) all the layers before the `fine_tune_at` layer (layer to begin modifying the base model)
 for layer in base_model.layers[:fine_tune_at]:
@@ -76,7 +84,7 @@ model.compile(optimizer=tf.keras.optimizers.Adam(1e-5), #This is compiling the m
               metrics=['accuracy'])
 model.summary()
 print('Number of trainable weights = {}'.format(len(model.trainable_weights)))
-history_fine = model.fit(train_generator, #retrain the model given the adjustments made
+history_fine = model.fit(train_generator, #retrain the model given the adjustments made. This model still contains the changes made to the first round of training (i.e. the additional convolutional, droupout, dense, pooling, and dense layers)
                          steps_per_epoch=len(train_generator), 
                          epochs=20,
                          validation_data=val_generator,
@@ -108,7 +116,7 @@ plt.show()
 converter = tf.lite.TFLiteConverter.from_keras_model(model)
 tflite_model = converter.convert()
 
-with open('AMAR_Model_Final.tflite', 'wb') as f: #Save model pre-quantization
+with open('AMAR_Model_W_NoPlant.tflite', 'wb') as f: #Save model pre-quantization
   f.write(tflite_model)
 
 # A generator that provides a representative dataset
@@ -137,7 +145,7 @@ converter.inference_input_type = tf.uint8
 converter.inference_output_type = tf.uint8
 tflite_model = converter.convert()
 
-with open('AMAR_Model_Final_quant.tflite', 'wb') as f: #model for use to convert to edge tpu model. NOTE: This model must still be converted to an edge-tpu model. It IS NOT ready as-is for use on a microcontroller utilizing an Edge TPU!
+with open('AMAR_Model_Final_quant.tflite', 'wb') as f: #model for use to convert to edge tpu model. NOTE: This model MUST still be converted to an edge-tpu model. It IS NOT ready as-is for use on a microcontroller utilizing an Edge TPU!
   f.write(tflite_model)
 
 
@@ -151,7 +159,7 @@ truth = np.argmax(batch_labels, axis=1)
 keras_accuracy = tf.keras.metrics.Accuracy()
 keras_accuracy(prediction, truth)
 
-print("Raw model accuracy: {:.3%}".format(keras_accuracy.result()))
+print("Raw model accuracy: {:.4%}".format(keras_accuracy.result()))
 def set_input_tensor(interpreter, input):
   input_details = interpreter.get_input_details()[0]
   tensor_index = input_details['index']
@@ -175,7 +183,7 @@ def classify_image(interpreter, input):
   top_1 = np.argmax(output)
   return top_1
 
-interpreter = tf.lite.Interpreter('mobilenet_v2_1.0_224_quant.tflite')
+interpreter = tf.lite.Interpreter('AMAR_Model_Final_quant.tflite')
 interpreter.allocate_tensors()
 
 # Collect all inference predictions in a list

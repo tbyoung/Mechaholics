@@ -46,9 +46,9 @@ def make_interpreter(model_file):
       ])
 
 #makes interpreter in "global context", discontinues need for reinitialization of model when running on AMAR
-labels = load_labels("plant_labels.txt")
+labels = load_labels("amar_labels.txt")
 
-interpreter = make_interpreter("AMAR_Model_quant_W_NoPlant_edgetpu.tflite")
+interpreter = make_interpreter("AMAR_Model_Final_quant_edgetpu.tflite")
 interpreter.allocate_tensors()
 
 def getClassification():

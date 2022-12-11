@@ -46,62 +46,58 @@ while 1:
         iter_count += 1
         if iter_count >= 15:
             weedDetect = classify.getClassification()
-           # weedDetect = ['not a weed', 0.50]
             print(weedDetect)
             
-            if(weedDetect[0][0]=='pigweed' and weedDetect[0][1] > .70):
-                angleTrack = 110
-                #start = t.time()
+            if(weedDetect[0][0]=='pigweed' and weedDetect[0][1] > .70): #If we detect a weed with over 70% confidence
+                angleTrack = 110 #Servo angle initial, pointing camera right
                 fullstop()
                 os.rename("/home/pi/mechaholics/img.jpg", ("/home/pi/mechaholics/stop_img_" + str(init_img_find_count) + ".jpg"))
                 init_img_find_count += 1
                 start = t.time()
                 stop = t.time()
                 aquired = 0
-                serv.setServoAngle(110)
+                serv.setServoAngle(110) #ensure camera is pointing right initially
                 ww_loop_iter = 0
                 ww_timeKeep = 0
-                while angleTrack < 180:
-                    angleTrack += 5
+                while angleTrack < 180: #While camera is moving from pointing right to pointing straight
+                    angleTrack += 5 #point more straight
                     if angleTrack > 180:
-                        angleTrack = 180
-                    serv.setServoAngle(angleTrack)
-                    weedDetect = classify.getClassification()
+                        angleTrack = 180 #ensure we dont go above 180 degree limit and error out servo
+                    serv.setServoAngle(angleTrack) #Set new servo angle
+                    weedDetect = classify.getClassification() #retrieve new image classification
                     iter_count = 0
-                    while (weedDetect[0][0] != 'pigweed'and weedDetect[0][1]<.70 and ww_loop_iter < 100):
+                    while (weedDetect[0][0] != 'pigweed'and weedDetect[0][1]<.70 and ww_loop_iter < 100): #ensure weed has been aquired. Includes ww_loop_iter incase of faulty classification as timeout
                         start = t.time()
-                        start2 = t.time()
-                        stop2 = t.time()
+                        start2 = t.time() #timer for PID
+                        stop2 = t.time() #end timer for PID
                         while stop2-start2 < 0.25:
                             sendToPID(0, -0.15)
                         fullstop()
-                        if iter_count == 7:
+                        if iter_count == 7: #reclassify every 7 iterations when turning to aquire weed
                             weedDetect = classify.getClassification()
                             iter_count = 0
                         stop = t.time()
-                        ww_timeKeep = ww_timeKeep + (stop-start)
+                        ww_timeKeep = ww_timeKeep + (stop-start) #update timekeep for turning back to straight
                         iter_count += 1
                         ww_loop_iter += 1
-                        #stop = t.time()
                     if ww_loop_iter >= 100:
                         break
                 stop = t.time()
                 fullstop()
                 weedDetect = classify.getClassification()               
                 if(weedDetect[0][0]=='pigweed' and weedDetect[0][1] > 0.70):
-                    #ww.engage()
-                    print("WEED WHACK!!!!!")
+                    #ww.engage() #this is commented out to prevent engaging during demo. prevents accidental use
+                    print("WEED WHACK!!!!!") #Placeholder for weedwhack engagement protocol
                 start = t.time()
-                while start - stop < ww_timeKeep*2:
+                while start - stop < ww_timeKeep*2: #loop for turning back straight
                     sendToPID(0, 0.04)
                     stop = t.time()
-                #start = t.time()
                 fullstop()
                 weedDetect = classify.getClassification()
                 serv.setServoAngle(110)
 
 
-                
+         #beginning of obstacle avoidance and navigation       
 
             iter_count = 0
         closest_L_obstacle, closest_R_obstacle = lidar.find_closest_obstacles()
