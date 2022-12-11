@@ -3,7 +3,7 @@ import time
 
 from PIL import Image
 from sys import settrace
-import L1_Classify
+import L1_Classify as classify
 import tflite_runtime.interpreter as tflite
 import platform
 
@@ -13,6 +13,10 @@ EDGETPU_SHARED_LIB = {
   'Darwin': 'libedgetpu.1.dylib',
   'Windows': 'edgetpu.dll'
 }[platform.system()]
+
+#Variable containing names of test images taken for the AMAR platform
+imgNames = [["pigweed_1.jpg", "pigweed_2.jpg", "pigweed_3.jpg", "pigweed_4.jpg", "pigweed_5.jpg", "pigweed_6.jpg", "pigweed_7.jpg", "pigweed_8.jpg", "pigweed_9.jpg", "pigweed_10.jpg", "pigweed_11.jpg", "pigweed_12.jpg"],
+  ["turnip_1.jpg", "turnip_2.jpg", "turnip_3.jpg", "turnip_4.jpg", "turnip_5.jpg", "turnip_6.jpg", "turnip_7.jpg", "turnip_8.jpg", "turnip_9.jpg", "turnip_10.jpg", "turnip_11.jpg", "turnip_12.jpg", "img.jpg"]]
 
 
 def load_labels(path, encoding='utf-8'):
@@ -56,12 +60,12 @@ def getClassification():
   cam.imgTake()
   input = "img.jpg"
   image_get = time.perf_counter() - start
-  size = L1_Classify.input_size(interpreter)
+  size = classify.input_size(interpreter)
   image = Image.open(input).convert('RGB').resize(size, Image.ANTIALIAS)
-  L1_Classify.set_input(interpreter, image)
+  classify.set_input(interpreter, image)
 
   interpreter.invoke()
-  classes = L1_Classify.get_output(interpreter, 2, 0)
+  classes = classify.get_output(interpreter, 2, 0)
   interpret = time.perf_counter() - image_get - start
   total_time = time.perf_counter() - start
   print("Image time: ", image_get*1000, "ms Interpret Time: ", interpret*1000, "ms Total Time: ", total_time*1000, "ms")
@@ -69,44 +73,29 @@ def getClassification():
   return inference_result
 
 if __name__ == '__main__':
-  parser = argparse.ArgumentParser(
-      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-  parser.add_argument(
-      '-m', '--model', required=True, help='File path of .tflite file.')
-  parser.add_argument(
-      '-i', '--input', required=True, help='Image to be classified.')
-  parser.add_argument(
-      '-l', '--labels', help='File path of labels file.')
-  parser.add_argument(
-      '-k', '--top_k', type=int, default=1,
-      help='Max number of classification results')
-  parser.add_argument(
-      '-t', '--threshold', type=float, default=0.0,
-      help='Classification score threshold')
-  parser.add_argument(
-      '-c', '--count', type=int, default=5,
-      help='Number of times to run inference')
-  args = parser.parse_args()
+  labels = load_labels("amar_labels.txt")
 
-  labels = load_labels(args.labels) if args.labels else {}
-
-  interpreter = make_interpreter(args.model)
+  interpreter = make_interpreter("AMAR_Model_Final_quant_edgetpu.tflite")
   interpreter.allocate_tensors()
-
-  size = L1_Classify.input_size(interpreter)
-  image = Image.open(args.input).convert('RGB').resize(size, Image.ANTIALIAS)
-  L1_Classify.set_input(interpreter, image)
-
-  print('----INFERENCE TIME----')
-  print('Note: The first inference on Edge TPU is slow because it includes',
-        'loading the model into Edge TPU memory.')
-  for _ in range(args.count):
+  for n in imgNames[0]:
+    size = classify.input_size(interpreter)
+    image = Image.open(n).convert('RGB').resize(size, Image.ANTIALIAS)
+    classify.set_input(interpreter, image)
     start = time.perf_counter()
     interpreter.invoke()
     inference_time = time.perf_counter() - start
-    classes = L1_Classify.get_output(interpreter, args.top_k, args.threshold)
+    classes = classify.get_output(interpreter, 2, 0)
     print('%.1fms' % (inference_time * 1000))
-
-  print('-------RESULTS--------')
-  for klass in classes:
-    print('%s: %.5f' % (labels.get(klass.id, klass.id), klass.score))
+    for klass in classes:
+      print('%s: %.5f' % (labels.get(klass.id, klass.id), klass.score), " ", n)
+  for n in imgNames[1]:
+    size = classify.input_size(interpreter)
+    image = Image.open(n).convert('RGB').resize(size, Image.ANTIALIAS)
+    classify.set_input(interpreter, image)
+    start = time.perf_counter()
+    interpreter.invoke()
+    inference_time = time.perf_counter() - start
+    classes = classify.get_output(interpreter, 2, 0)
+    print('%.1fms' % (inference_time * 1000))
+    for klass in classes:
+      print('%s: %.5f' % (labels.get(klass.id, klass.id), klass.score), " ", n)
